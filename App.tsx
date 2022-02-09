@@ -21,7 +21,7 @@ import {
   PermissionsAndroid,
 } from 'react-native';
 
-import Geolocation from 'react-native-geolocation-service';
+import Geolocation, { getCurrentPosition } from 'react-native-geolocation-service';
 import Geocoder from 'react-native-geocoder';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -33,52 +33,61 @@ interface ILocation {
 
 const App: () => Node = () => {
   const isDarkMode = useColorScheme() === 'dark';
-  const [location, setLocation] = useState<ILocation | undefined>(undefined);
+  const [city, setCity] = useState<String>('위치 불러오는 중...');
+  const [ok, setOk] = useState(true);
 
-  useEffect(() => {
-    const requestPermission = async () => {
-      if (Platform.OS === "android") {
-        await PermissionsAndroid.requestMultiple([
-            PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
-            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        ]).then((result)=>{
-            if (result['android.permission.ACCESS_COARSE_LOCATION']
-            && result['android.permission.ACCESS_FINE_LOCATION']
-            === 'granted') {
-                console.log("모든 권한 획득");
-            } else {
-                console.log("권한거절");
-            }
-        });
+  const requestPermission = async () => {
+    if (Platform.OS === "android") {
+      const result = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      ]);
+      
+      if (result['android.permission.ACCESS_COARSE_LOCATION']
+        && result['android.permission.ACCESS_FINE_LOCATION']
+      === 'granted') {
+        console.log("모든 권한 획득");
+      } else {
+        setOk(false);
+        console.log("권한거절");
       }
     }
+ 
+    await Geolocation.getCurrentPosition(
+      loc => {
+        console.log(loc);
 
+        const {latitude, longitude} = loc.coords;
+        const location = {
+          lat: latitude,
+          lng: longitude
+        };
+
+        Geocoder.geocodePosition(location).then(res => {
+          // res is an Array of geocoding object (see below)
+          console.log(res);
+          setCity(res[0].formattedAddress);
+        })
+        .catch(err => {
+          setOk(false);
+          console.log(err)
+        })
+      },
+      error => {
+        // See error code charts below.
+        setOk(false);
+        console.log(error.code, error.message);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+    );
+  }
+
+  useEffect(() => {
     if (Platform.os === 'ios') {
       Geolocation.requestAuthorization('always');
     } else if (Platform.OS === "android") {
       requestPermission();
     }
-
-    Geolocation.getCurrentPosition(
-      (loc) => {
-          console.log(loc);
-
-          const {latitude, longitude} = loc.coords;
-          setLocation({latitude, longitude});
-      },
-      (error) => {
-          // See error code charts below.
-          console.log(error.code, error.message);
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-    );
-
-    Geocoder.geocodePosition(location).then(res => {
-      // res is an Array of geocoding object (see below)
-      console.log(res);
-    })
-    .catch(err => console.log(err))
-
   }, []);
 
   return (
@@ -99,7 +108,7 @@ const App: () => Node = () => {
       >
         <View style={styles.instrPage}>
           <Text style={styles.instrTitle}>앱 안내 부분</Text>
-          <Text style={styles.instrContent}>{location ? location.latitude : '위치 로드 실패'}</Text>
+          <Text style={styles.instrContent}>{ok ? city : '위치 로드 실패'}</Text>
         </View>
         <View style={styles.instrPage}>
           <Text style={styles.instrTitle}>앱 안내 부분</Text>
