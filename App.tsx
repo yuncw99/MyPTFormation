@@ -25,6 +25,8 @@ import Geolocation, { getCurrentPosition } from 'react-native-geolocation-servic
 import Geocoder from 'react-native-geocoder';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
+const myAPIKey = "AIzaSyD8XeoI_NB070SM05Wdi2Rn8xhXmaocic0";
+const myWeatherAPIKey = "172d7fd711ea39ffb98f276cc8692a50";
 
 interface ILocation {
   lat: number;
@@ -34,9 +36,13 @@ interface ILocation {
 const App: () => Node = () => {
   const isDarkMode = useColorScheme() === 'dark';
   const [city, setCity] = useState<String>('위치 불러오는 중...');
+  const [location, setLocation] = useState();
+  const [currWeather, setCurrWeather] = useState('Loading...');
+  const [currTemp, setCurrTemp] = useState(273);
+  const [hourlyWeather, setHourlyWeather] = useState('Loading...');
   const [ok, setOk] = useState(true);
 
-  const requestPermission = async () => {
+  const getWeather = async () => {
     if (Platform.OS === "android") {
       const result = await PermissionsAndroid.requestMultiple([
           PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
@@ -54,7 +60,7 @@ const App: () => Node = () => {
     }
  
     await Geolocation.getCurrentPosition(
-      loc => {
+      async(loc) => {
         console.log(loc);
 
         const {latitude, longitude} = loc.coords;
@@ -62,16 +68,41 @@ const App: () => Node = () => {
           lat: latitude,
           lng: longitude
         };
+        await setLocation(location);
 
-        Geocoder.geocodePosition(location).then(res => {
+        
+        await Geocoder.geocodePosition(location).then(res => {
           // res is an Array of geocoding object (see below)
           console.log(res);
-          setCity(res[0].formattedAddress);
+          setCity(res[0].streetName);
         })
         .catch(err => {
           setOk(false);
-          console.log(err)
+          console.log(err);
         })
+        
+        /*
+        fetch('https://maps.googleapis.com/maps/api/geocode/json?address=' + location.lat + ',' + location.lng + '&key=' + myAPIKey + '&language=ko').then((response) => response.json()) .then((responseJson) => {
+          console.log(responseJson.results);
+          setCity(responseJson.results[0].formatted_address);
+        })
+        .catch(err => {
+          setOk(false);
+          console.log("error : " + err);
+        })
+        */
+        try {
+          const weatherRes = await fetch(`https://api.openweathermap.org/data/2.5/onecall?lat=${location.lat}&lon=${location.lng}&exclude=minutely,alerts,daily&appid=${myWeatherAPIKey}`);
+          const weatherJson = await weatherRes.json();
+          console.log(weatherJson);
+
+          setCurrWeather(weatherJson.current);
+          setCurrTemp(weatherJson.current.temp);
+          setHourlyWeather(weatherJson.hourly)
+        } catch(err) {
+          setOk(false);
+          console.log("error " + err);
+        }
       },
       error => {
         // See error code charts below.
@@ -80,13 +111,16 @@ const App: () => Node = () => {
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
     );
+
+    
   }
 
   useEffect(() => {
     if (Platform.os === 'ios') {
       Geolocation.requestAuthorization('always');
+      getWeather();
     } else if (Platform.OS === "android") {
-      requestPermission();
+      getWeather();
     }
   }, []);
 
@@ -107,16 +141,8 @@ const App: () => Node = () => {
         contentContainerStyle={styles.instruction}
       >
         <View style={styles.instrPage}>
-          <Text style={styles.instrTitle}>앱 안내 부분</Text>
+          <Text style={styles.instrTitle}>{ok ? (Number(currTemp) - 273).toFixed(1).toString() + "℃" : '-'}</Text>
           <Text style={styles.instrContent}>{ok ? city : '위치 로드 실패'}</Text>
-        </View>
-        <View style={styles.instrPage}>
-          <Text style={styles.instrTitle}>앱 안내 부분</Text>
-          <Text style={styles.instrContent}>앱 안내 부분</Text>
-        </View>
-        <View style={styles.instrPage}>
-          <Text style={styles.instrTitle}>앱 안내 부분</Text>
-          <Text style={styles.instrContent}>앱 안내 부분</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
